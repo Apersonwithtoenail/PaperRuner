@@ -1,10 +1,19 @@
+# backups
+*.bak
+*.orig
+
+# optimized wallpapers
+*.lite.mp4
+
+# python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 .venv/
-venv/
+
+# editor
+.vscode/
+.idea/
+*.swp
+
+# os
 .DS_Store
-*.mp4
-*.webm
-*.mkv
-screenshot.png
