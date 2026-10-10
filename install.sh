@@ -1,58 +1,44 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# install.sh — install PaperRuner and its desktop integration
 set -e
-echo "PaperRuner installer"
-echo "=================="
 
-if [ ! -f /etc/debian_version ]; then
-    echo "Only Debian / Ubuntu / Kali supported for auto-install."
-    exit 1
-fi
+APP_NAME="PaperRuner"
+APP_ID="paperruner"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "-> Installing dependencies..."
-sudo apt update
-sudo apt install -y mpv ffmpeg python3-gi python3-gi-cairo \
-                    python3-pil libx11-dev libxext-dev libxrender-dev \
-                    git build-essential x11-utils
+BIN_DIR="$HOME/.local/bin"
+ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+DESKTOP_DIR="$HOME/.local/share/applications"
 
-echo "-> Installing xwinwrap..."
-if ! command -v xwinwrap >/dev/null; then
-    TMP=$(mktemp -d)
-    cd "$TMP"
-    git clone https://github.com/mmbrown/xwinwrap.git
-    cd xwinwrap
-    make
-    sudo cp xwinwrap /usr/local/bin/
-    cd ~
-    rm -rf "$TMP"
-fi
+mkdir -p "$BIN_DIR" "$ICON_DIR" "$DESKTOP_DIR"
 
-echo "-> Copying files..."
-INSTALL_DIR="$HOME/.local/share/paperruner"
-mkdir -p "$INSTALL_DIR"
-cp paperruner-app.py paperruner-engine.sh "$INSTALL_DIR/"
-chmod +x "$INSTALL_DIR/paperruner-app.py" "$INSTALL_DIR/paperruner-engine.sh"
+# 1. symlink the launcher
+ln -sf "$SCRIPT_DIR/paperruner-app.py" "$BIN_DIR/paperruner"
+chmod +x "$SCRIPT_DIR/paperruner-app.py"
 
-echo "-> Creating launcher..."
-mkdir -p "$HOME/.local/bin"
-cat > "$HOME/.local/bin/paperruner" << 'WRAP'
-#!/bin/bash
-exec python3 "$HOME/.local/share/paperruner/paperruner-app.py" "$@"
-WRAP
-chmod +x "$HOME/.local/bin/paperruner"
+# 2. icon
+cp "$SCRIPT_DIR/assets/icon.svg" "$ICON_DIR/$APP_ID.svg"
 
-mkdir -p "$HOME/.local/share/applications"
-cat > "$HOME/.local/share/applications/paperruner.desktop" << 'DESK'
+# 3. .desktop
+cat > "$DESKTOP_DIR/$APP_ID.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=PaperRuner
-Comment=Lightweight live wallpaper manager
-Exec=/home/kavish/.local/bin/paperruner
-Icon=preferences-desktop-wallpaper
+Name=$APP_NAME
+GenericName=Live Wallpaper
+Comment=Lightweight live wallpaper manager for Linux/X11
+Exec=python3 $HOME/.local/bin/paperruner
+Icon=$APP_ID
 Terminal=false
-Categories=Graphics;Utility;
-DESK
-update-desktop-database "$HOME/.local/share/applications/" 2>/dev/null || true
+Categories=Utility;Graphics;
+Keywords=wallpaper;video;live;mpv;
+DESKTOP
 
-echo ""
-echo "Installed! Run: paperruner"
-echo "Add wallpapers to: ~/Videos/PaperRunerpapers/"
+# 4. refresh caches
+update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+xfce4-panel -r 2>/dev/null || true
+
+echo "✅ $APP_NAME installed"
+echo "   Run: paperruner"
+echo "   Or search '$APP_NAME' in your app menu."
+echo "   Uninstall with: ./uninstall.sh"
