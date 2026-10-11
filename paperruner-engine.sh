@@ -55,6 +55,17 @@ if ! glxinfo -B 2>/dev/null | grep -qi "OpenGL"; then
     GPU_CTX=""
 fi
 
+# --- PAPERUNER GIF OVERRIDE v2 ---
+case "${WALLPAPER,,}" in
+  *.gif)
+    if command -v glxinfo >/dev/null 2>&1 && glxinfo -B 2>/dev/null | grep -qi OpenGL; then
+        VO="gpu"; GPU_CTX="x11egl"
+    fi
+    HW="no"
+    ;;
+esac
+# --- END GIF OVERRIDE v2 ---
+
 # ---------- Quality profile ----------
 EXTRA_ARGS=""
 VF=""

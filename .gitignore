@@ -17,3 +17,7 @@ __pycache__/
 
 # os
 .DS_Store
+
+# paperruner backups from patching
+*.bak.*
+*.bak

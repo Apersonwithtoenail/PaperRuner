@@ -2,6 +2,7 @@
 """PaperRuner — lightweight live wallpaper manager for Linux."""
 
 import gi
+import time
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 
@@ -327,9 +328,15 @@ class App(Gtk.Window):
         self.status.set_text(text)
 
     def _load_conf(self):
+        global WALL_DIR
         c = configparser.ConfigParser()
         try:
             c.read(CONF)
+            if c.has_option("main", "folder"):
+                WALL_DIR = c.get("main", "folder")
+            if c.has_option("main", "last_wallpaper"):
+                self.current = c.get("main", "last_wallpaper")
+                self.current_wall = self.current
             if "main" in c:
                 self.rotate_on = c["main"].getboolean("rotate", False)
                 self.rotate_mins = c["main"].getint("interval", 10)
@@ -339,6 +346,7 @@ class App(Gtk.Window):
             pass
 
     def _save_conf(self):
+        global WALL_DIR
         c = configparser.ConfigParser()
         c["main"] = {
             "rotate": "1" if self.rotate_on else "0",
@@ -346,6 +354,11 @@ class App(Gtk.Window):
             "quality": self.quality,
             "fps": self.fps,
         }
+        if WALL_DIR:
+            c.set("main", "folder", WALL_DIR)
+        wall = getattr(self, 'current', None) or getattr(self, 'current_wall', None)
+        if wall:
+            c.set("main", "last_wallpaper", wall)
         try:
             os.makedirs(os.path.dirname(CONF), exist_ok=True)
             with open(CONF, "w") as f:
@@ -397,15 +410,29 @@ class App(Gtk.Window):
         return btn
 
     def apply(self, path):
-        if not os.path.exists(path):
-            self.set_status(f"❌  Missing: {path}")
+        import time as _t
+        now = _t.monotonic()
+        last = getattr(self, "_last_apply", 0)
+        if now - last < 1.5:
+            self.set_status("⏳  busy — wait a moment")
             return
+        self._last_apply = now
+
         self.current = path
-        self._launch(path)
+        self.current_wall = path
+        self._save_conf()
         self.set_status(f"▶  {os.path.basename(path)}")
-        self.refresh()
+
+        # kill only the running mpv/xwinwrap. The systemd resume wrapper
+        # notices within ~2s and relaunches with the new conf entry.
+        subprocess.run(["pkill", "-f", "mpv.*-wid"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-f", "xwinwrap.*mpv"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _launch(self, path):
+        self.current_wall = path
+        self._save_conf()
         subprocess.run(["pkill", "-f", "xwinwrap.*mpv"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         import time
