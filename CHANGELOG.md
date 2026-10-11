@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.2 — 2026-10-11
+
+### Fixed
+- Rotation only ran while the GUI was open (GLib timer died on close).
+  Now handled by the systemd service — keeps rotating with the GUI closed.
+
+### Changed
+- GUI rotate checkbox + interval slider are now pure conf writers.
+  The service reads ~/.config/paperruner.conf every 5s and does the swap.
+- paperruner-resume.sh now polls for rotation due-time alongside mpv liveness.
+- Rotation updates last_wallpaper in conf so a reboot resumes the current one.
+
+
 ## v1.0.1 — 2026-10-11
 
 ### Added

@@ -311,8 +311,6 @@ class App(Gtk.Window):
         self.connect("destroy", self.on_destroy)
         self.show_all()
         GLib.idle_add(self.refresh)
-        if self.rotate_on:
-            self._start_rotate()
 
     def btn(self, parent, text, cb, primary=False):
         b = Gtk.Button(label=text)
@@ -477,18 +475,15 @@ class App(Gtk.Window):
         self.rotate_on = btn.get_active()
         self._save_conf()
         if self.rotate_on:
-            self._start_rotate()
+            self.set_status(f"🔁  Rotate ON — every {self.rotate_mins} min (service picks this up)")
         else:
-            self._stop_rotate()
+            self.set_status("⏹  Rotate OFF")
 
     def on_interval(self, scale):
         self.rotate_mins = int(scale.get_value())
-        if hasattr(self, "interval_lbl"):
-            self.interval_lbl.set_text(f"{self.rotate_mins} min")
         self._save_conf()
         if self.rotate_on:
-            self._stop_rotate()
-            self._start_rotate()
+            self.set_status(f"🔁  Interval → {self.rotate_mins} min")
 
     def on_quality_change(self, combo):
         self.quality = combo.get_active_text() or "auto"
@@ -502,22 +497,14 @@ class App(Gtk.Window):
         if self.current:
             self.apply(self.current)
 
-    def _start_rotate(self):
-        if self.rotate_timer:
-            GLib.source_remove(self.rotate_timer)
-        ms = self.rotate_mins * 60 * 1000
-        self.rotate_timer = GLib.timeout_add(ms, self._rotate_tick)
-        self.set_status(f"🔁  Rotating every {self.rotate_mins} min")
+    def _start_rotate(self, *a, **k):
+        pass  # rotation handled by systemd service
 
-    def _stop_rotate(self):
-        if self.rotate_timer:
-            GLib.source_remove(self.rotate_timer)
-            self.rotate_timer = None
-        self.set_status("⏹  Rotation off")
+    def _stop_rotate(self, *a, **k):
+        pass  # rotation handled by systemd service
 
-    def _rotate_tick(self):
-        self.apply_random()
-        return True
+    def _rotate_tick(self, *a, **k):
+        pass  # rotation handled by systemd service
 
     def on_destroy(self, *_):
         Gtk.main_quit()
