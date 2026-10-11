@@ -19,7 +19,7 @@ FPS="${5:-native}"
 # Only fall back to .lite.mp4 when quality=low, or when the original is missing.
 # Otherwise use the real file — that's what makes quality settings actually matter.
 LITE="${WALLPAPER%.*}.lite.mp4"
-if [ "$QUALITY" = "low" ] && [ -f "$LITE" ]; then
+if [ -f "$LITE" ]; then
     WALLPAPER="$LITE"
 fi
 

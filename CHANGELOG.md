@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.3 — 2026-10-11
+
+### Added
+- ⚡ Optimize button in the GUI opens a dialog with presets:
+  Low-end laptop / Balanced / Quality / Custom
+- Per-file settings: resolution, FPS, CRF, x264 preset, low-priority,
+  pause-wallpaper-during-encode
+- Live progress in the status bar (frames / elapsed / config)
+- paperruner-optimize.sh takes full args now
+
+### Changed
+- Engine prefers any .lite.mp4 sibling automatically (was only when
+  quality=low). Any file you optimize just works.
+
+### Notes
+- On 2-core machines the default preset stops the wallpaper during
+  encode (both cores go to ffmpeg) and uses nice/ionice so the
+  desktop stays responsive.
+- 2560x1440@60 source → 1366x768@24 .lite.mp4 is ~9x smaller and
+  drops wallpaper CPU from ~100% to ~15% of one core on a P6200.
+
+
 ## v1.0.2 — 2026-10-11
 
 ### Fixed

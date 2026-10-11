@@ -214,6 +214,10 @@ class App(Gtk.Window):
         brand_sub.set_xalign(0)
         brand_box.pack_start(brand_sub, False, False, 0)
         topbar.pack_start(brand_box, False, False, 0)
+        opt_btn = Gtk.Button(label="⚡ Optimize")
+        opt_btn.set_tooltip_text("Create a small .lite.mp4 for the selected wallpaper")
+        opt_btn.connect("clicked", self.on_optimize)
+        topbar.pack_end(opt_btn, False, False, 0)
 
         topbar.pack_start(Gtk.Box(), True, True, 0)  # spacer
 
@@ -470,6 +474,148 @@ class App(Gtk.Window):
             self.set_status(f"📂  {WALL_DIR}")
             self.refresh()
         d.destroy()
+
+    OPT_PRESETS = {
+        "Low-end laptop": dict(width=0, fps=15, crf=28, preset="ultrafast", lowprio=1, pause=1),
+        "Balanced":       dict(width=0, fps=24, crf=26, preset="ultrafast", lowprio=1, pause=1),
+        "Quality":        dict(width=0, fps=30, crf=20, preset="medium",    lowprio=0, pause=0),
+        "Custom":         dict(width=0, fps=24, crf=26, preset="ultrafast", lowprio=1, pause=1),
+    }
+
+    def on_optimize(self, *_):
+        if not self.current:
+            self.set_status("⚠  pick a wallpaper first")
+            return
+        src = self.current
+        if src.endswith(".lite.mp4"):
+            self.set_status("⚠  that's already a .lite.mp4")
+            return
+
+        dlg = Gtk.Dialog(title="⚡ Optimize wallpaper", transient_for=self, modal=True)
+        dlg.add_buttons("Cancel", Gtk.ResponseType.CANCEL,
+                        "Optimize", Gtk.ResponseType.OK)
+        dlg.set_default_size(420, -1)
+
+        grid = Gtk.Grid(row_spacing=8, column_spacing=10,
+                        margin=16, margin_top=12, margin_bottom=12)
+        dlg.get_content_area().add(grid)
+
+        def row(r, label, widget):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, r, 1, 1)
+            grid.attach(widget, 1, r, 1, 1)
+
+        # preset
+        preset_cb = Gtk.ComboBoxText()
+        for k in self.OPT_PRESETS: preset_cb.append_text(k)
+        preset_cb.set_active(1)  # Balanced
+        row(0, "Preset", preset_cb)
+
+        # width
+        width_cb = Gtk.ComboBoxText()
+        for label, val in [("Auto (screen)", 0), ("1920", 1920),
+                           ("1366", 1366), ("1280", 1280), ("854", 854)]:
+            width_cb.append_text(label)
+        width_cb.set_active(0)
+        row(1, "Resolution", width_cb)
+
+        # fps
+        fps_cb = Gtk.ComboBoxText()
+        for f in ["15", "20", "24", "30", "60"]: fps_cb.append_text(f)
+        fps_cb.set_active(2)  # 24
+        row(2, "FPS", fps_cb)
+
+        # crf
+        crf_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 18, 32, 1)
+        crf_scale.set_value(26); crf_scale.set_hexpand(True)
+        crf_scale.set_tooltip_text("Lower = better quality, bigger file")
+        row(3, "Quality (CRF)", crf_scale)
+
+        # x264 preset
+        xp_cb = Gtk.ComboBoxText()
+        for xp in ["ultrafast", "veryfast", "fast", "medium"]: xp_cb.append_text(xp)
+        xp_cb.set_active(0)
+        row(4, "Encoder", xp_cb)
+
+        # options
+        opt_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        lowprio_cb = Gtk.CheckButton(label="Low priority (keep system responsive)")
+        lowprio_cb.set_active(True)
+        pause_cb = Gtk.CheckButton(label="Pause wallpaper during encode")
+        pause_cb.set_active(True)
+        opt_box.pack_start(lowprio_cb, False, False, 0)
+        opt_box.pack_start(pause_cb, False, False, 0)
+        grid.attach(opt_box, 0, 5, 2, 1)
+
+        # preset → apply to fields
+        def on_preset(_cb):
+            name = preset_cb.get_active_text()
+            if name == "Custom": return
+            pr = self.OPT_PRESETS[name]
+            width_cb.set_active(0 if pr["width"] == 0 else 1)
+            fps_cb.set_active(["15","20","24","30","60"].index(str(pr["fps"])))
+            crf_scale.set_value(pr["crf"])
+            xp_cb.set_active(["ultrafast","veryfast","fast","medium"].index(pr["preset"]))
+            lowprio_cb.set_active(bool(pr["lowprio"]))
+            pause_cb.set_active(bool(pr["pause"]))
+        preset_cb.connect("changed", on_preset)
+        on_preset(preset_cb)
+
+        dlg.show_all()
+        resp = dlg.run()
+        if resp != Gtk.ResponseType.OK:
+            dlg.destroy()
+            return
+
+        width = [0, 1920, 1366, 1280, 854][width_cb.get_active()]
+        fps   = int(fps_cb.get_active_text() or "24")
+        crf   = int(crf_scale.get_value())
+        xp    = xp_cb.get_active_text() or "ultrafast"
+        lp    = "1" if lowprio_cb.get_active() else "0"
+        pa    = "1" if pause_cb.get_active() else "0"
+        dlg.destroy()
+
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "paperruner-optimize.sh")
+        try:
+            self._opt_proc = subprocess.Popen(
+                [script, src, str(width), str(fps), str(crf), xp, lp, pa],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1)
+        except Exception as e:
+            self.set_status(f"⚠  {e}")
+            return
+        self._opt_start = time.monotonic()
+        self._opt_cfg = f"{width or 'auto'}p @ {fps}fps crf{crf} {xp}"
+        self.set_status(f"⚡  optimizing ({self._opt_cfg})…")
+        GLib.timeout_add(300, self._opt_tick, src)
+
+    def _opt_tick(self, src):
+        proc = getattr(self, "_opt_proc", None)
+        if proc is None: return False
+        try: line = proc.stdout.readline() or ""
+        except Exception: line = ""
+        el = time.monotonic() - getattr(self, "_opt_start", time.monotonic())
+        if line:
+            if "frame=" in line and "time=" in line:
+                try:
+                    frame = line.split("frame=")[1].split()[0].strip()
+                    tpart = line.split("time=")[1].split()[0].strip()
+                    h, m_, s = tpart.split(":")
+                    secs = int(h)*3600 + int(m_)*60 + float(s)
+                    self.set_status(f"⚡  {frame} fr · {secs:.1f}s · {el:.0f}s el · {self._opt_cfg}")
+                except Exception: pass
+            elif line.startswith("OPT_CFG:"):
+                pass
+            elif line.startswith("DONE:"):
+                self.set_status(f"✓  {os.path.basename(line[5:].strip())}")
+        rc = proc.poll()
+        if rc is None: return True
+        if rc == 0:
+            self.refresh()
+            self.set_status(f"✓  done in {el:.0f}s")
+        else:
+            self.set_status(f"⚠  optimize failed ({rc})")
+        return False
 
     def on_rotate_toggle(self, btn):
         self.rotate_on = btn.get_active()
