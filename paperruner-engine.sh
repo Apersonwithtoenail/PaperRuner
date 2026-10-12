@@ -9,6 +9,13 @@
 #   $5  fps: native | 60 | 30 | 24 | 15 | 10  (default: native)
 
 WALLPAPER="$1"
+# --- PAPERUNER STOP GUARD ---
+STATE_FILE="$HOME/.config/paperruner.state"
+if [ -f "$STATE_FILE" ] && [ "$(cat "$STATE_FILE" 2>/dev/null)" = "stopped" ]; then
+    echo "[engine] stopped by user, refusing to launch"
+    exit 0
+fi
+# --- END STOP GUARD ---
 SCREEN_W="${2:-1366}"
 SCREEN_H="${3:-768}"
 QUALITY="${4:-auto}"
@@ -24,6 +31,34 @@ if [ -f "$LITE" ]; then
 fi
 
 LOG=/tmp/paperruner-engine.log
+# ---------- VAAPI driver selection ----------
+# i965 works on all Intel up to Skylake. iHD only works on Broadwell+.
+# Detect by driver .so file presence — much more reliable than lspci strings.
+VAAPI_ENV=""
+I965_SO=""
+IHD_SO=""
+for so in /usr/lib/x86_64-linux-gnu/dri/i965_drv_video.so           /usr/lib/i386-linux-gnu/dri/i965_drv_video.so           /usr/lib/dri/i965_drv_video.so; do
+    [ -f "$so" ] && I965_SO="$so" && break
+done
+for so in /usr/lib/x86_64-linux-gnu/dri/iHD_drv_video.so           /usr/lib/i386-linux-gnu/dri/iHD_drv_video.so           /usr/lib/dri/iHD_drv_video.so; do
+    [ -f "$so" ] && IHD_SO="$so" && break
+done
+
+if lspci 2>/dev/null | grep -qi "Intel.*Graphics"; then
+    # pre-Broadwell Intel: i965 is the only one that works
+    if lspci 2>/dev/null | grep -qiE "Core Processor Integrated|Ironlake|Sandy Bridge|Ivy Bridge|Haswell|Valley View|Bay Trail|Atom"; then
+        if [ -n "$I965_SO" ]; then export LIBVA_DRIVER_NAME=i965; VAAPI_ENV="LIBVA_DRIVER_NAME=i965"; fi
+    else
+        # Broadwell+: prefer iHD, fall back to i965
+        if [ -n "$IHD_SO" ]; then export LIBVA_DRIVER_NAME=iHD; VAAPI_ENV="LIBVA_DRIVER_NAME=iHD"
+        elif [ -n "$I965_SO" ]; then export LIBVA_DRIVER_NAME=i965; VAAPI_ENV="LIBVA_DRIVER_NAME=i965"; fi
+    fi
+elif lspci 2>/dev/null | grep -qi "AMD\|Radeon"; then
+    export LIBVA_DRIVER_NAME=radeonsi
+    VAAPI_ENV="LIBVA_DRIVER_NAME=radeonsi"
+fi
+
+
 : > "$LOG"
 
 pkill -f "xwinwrap.*mpv" 2>/dev/null
@@ -118,7 +153,7 @@ esac
 cat << INFO | tee -a "$LOG"
 [engine] hardware:
   cores: $CORES
-  hwdec: $HW
+  hwdec: $HW ($VAAPI_ENV)
   vo:    $VO
   quality: $QUALITY
   fps: $FPS

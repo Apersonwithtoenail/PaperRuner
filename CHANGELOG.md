@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.0.4 — 2026-10-12
+
+### Fixed
+- **VAAPI now actually engages on old Intel GPUs.** Engine detects
+  the libva driver by .so file presence and sets LIBVA_DRIVER_NAME=i965
+  on Ironlake/Sandy/Ivy/Haswell or iHD on Broadwell+ or radeonsi on AMD.
+  Before this, hwdec silently fell back to software and mpv used
+  one full core. After: ~10% of one core on a P6200 with an ILK GPU.
+- **Stop button now actually stops.** It writes a stop-state file, kills
+  mpv, and the systemd resume wrapper enforces the state every 1s. The
+  engine also refuses to launch while stopped. Previously the service
+  restarted mpv the moment it died.
+- **Stop button is a toggle** with a synced label: ⏹ Stop ↔ ▶ Start.
+  Label reflects real state on app launch.
+- **btn() helper now returns the created button**, so handler code can
+  capture and mutate labels. Previously the Stop handler had no reference
+  to its own button.
+
+### Added
+- install.sh installs i965-va-driver / i965-va-driver-shaders on Debian
+  derivatives so old Intel laptops get hardware decode out of the box.
+
+### Measured on Kali 2026.3, Intel P6200, Ironlake GPU, 3.6 GB RAM
+- Wallpaper CPU: 100–122% → 9.3%
+- Wallpaper RAM: ~90 MB → 148 MB (kept, quality-first)
+- Xorg: 27% → 7%
+- Load average: 5.7–7.2 → 2.4
+
+
 ## v1.0.3 — 2026-10-11
 
 ### Added

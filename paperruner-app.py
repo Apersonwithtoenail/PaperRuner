@@ -12,6 +12,7 @@ APP = "PaperRuner"
 VER = "1.0"
 WALL_DIR = os.environ.get("PAPERRUNER_DIR", os.path.expanduser("~/Videos/LiveWallpapers"))
 CONF = os.path.expanduser("~/.config/paperruner.conf")
+STATE = os.path.expanduser("~/.config/paperruner.state")
 THUMB_DIR = os.path.expanduser("~/.cache/paperruner/thumbs")
 
 VIDEO_EXTS = (".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v")
@@ -224,7 +225,7 @@ class App(Gtk.Window):
         self.btn(topbar, "📁  Folder",  self.pick_folder)
         self.btn(topbar, "🔄  Refresh", self.refresh)
         self.btn(topbar, "🎲  Random",  self.apply_random, primary=True)
-        self.btn(topbar, "⏹  Stop",     self.stop_wallpaper)
+        self._stop_btn = self.btn(topbar, "⏹  Stop",     self.stop_wallpaper)
         self.btn(topbar, "❌  Quit",    Gtk.main_quit)
 
         # ---------- MAIN AREA ----------
@@ -315,6 +316,7 @@ class App(Gtk.Window):
         self.connect("destroy", self.on_destroy)
         self.show_all()
         GLib.idle_add(self.refresh)
+        GLib.idle_add(self._sync_stop_button)
 
     def btn(self, parent, text, cb, primary=False):
         b = Gtk.Button(label=text)
@@ -325,6 +327,7 @@ class App(Gtk.Window):
         b.set_can_focus(False)
         b.connect("clicked", lambda *_: cb())
         parent.pack_start(b, False, False, 0)
+        return b
 
     def set_status(self, text):
         self.status.set_text(text)
@@ -419,6 +422,16 @@ class App(Gtk.Window):
             self.set_status("⏳  busy — wait a moment")
             return
         self._last_apply = now
+        try:
+            if os.path.exists(STATE):
+                os.remove(STATE)
+        except Exception:
+            pass
+        subprocess.run(["systemctl", "--user", "start", "paperruner.service"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # ensure the service is running (in case Stop was pressed)
+        subprocess.run(["systemctl", "--user", "start", "paperruner.service"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         self.current = path
         self.current_wall = path
@@ -453,12 +466,48 @@ class App(Gtk.Window):
             return
         self.apply(random.choice(files))
 
-    def stop_wallpaper(self):
-        subprocess.run(["pkill", "-f", "xwinwrap.*mpv"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.current = None
-        self.set_status("⏹  Stopped")
-        self.refresh()
+    def _sync_stop_button(self):
+        if not hasattr(self, "_stop_btn"):
+            return
+        try:
+            stopped = (open(STATE).read().strip() == "stopped")
+        except Exception:
+            stopped = False
+        self._stop_btn.set_label("▶  Start" if stopped else "⏹  Stop")
+
+    def stop_wallpaper(self, *_, **kw):
+        """Toggle: stop if running, start if stopped."""
+        is_stopped = False
+        try:
+            is_stopped = (open(STATE).read().strip() == "stopped")
+        except Exception:
+            pass
+
+        if is_stopped:
+            # ---- START ----
+            try:
+                os.remove(STATE)
+            except Exception:
+                pass
+            subprocess.run(["systemctl", "--user", "start", "paperruner.service"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.set_status("▶  starting…")
+            if hasattr(self, "_stop_btn"):
+                self._stop_btn.set_label("⏹  Stop")
+        else:
+            # ---- STOP ----
+            try:
+                with open(STATE, "w") as f:
+                    f.write("stopped")
+            except Exception:
+                pass
+            subprocess.run(["pkill", "-9", "-f", "mpv.*-wid"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "xwinwrap.*mpv"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.set_status("⏹  stopped")
+            if hasattr(self, "_stop_btn"):
+                self._stop_btn.set_label("▶  Start")
 
     def pick_folder(self):
         global WALL_DIR
@@ -632,12 +681,22 @@ class App(Gtk.Window):
             self.set_status(f"🔁  Interval → {self.rotate_mins} min")
 
     def on_quality_change(self, combo):
+        try:
+            if os.path.exists(STATE):
+                os.remove(STATE)
+        except Exception:
+            pass
         self.quality = combo.get_active_text() or "auto"
         self._save_conf()
         if self.current:
             self.apply(self.current)
 
     def on_fps_change(self, combo):
+        try:
+            if os.path.exists(STATE):
+                os.remove(STATE)
+        except Exception:
+            pass
         self.fps = combo.get_active_text() or "native"
         self._save_conf()
         if self.current:
