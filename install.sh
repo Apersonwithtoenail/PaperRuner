@@ -5,6 +5,7 @@ set -e
 APP_NAME="PaperRuner"
 APP_ID="paperruner"
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/paperruner-app.py"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BIN="$HOME/.local/bin"
 ICONS="$HOME/.local/share/icons/hicolor/scalable/apps"
