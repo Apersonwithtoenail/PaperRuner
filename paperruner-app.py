@@ -187,6 +187,7 @@ class App(Gtk.Window):
         self.rotate_mins = 10
         self.quality = "auto"
         self.fps = "native"
+        self.pause_mode = "fullscreen"
         self._load_conf()
 
         p = Gtk.CssProvider()
@@ -225,7 +226,7 @@ class App(Gtk.Window):
         self.btn(topbar, "📁  Folder",  self.pick_folder)
         self.btn(topbar, "🔄  Refresh", self.refresh)
         self.btn(topbar, "🎲  Random",  self.apply_random, primary=True)
-        self._stop_btn = self.btn(topbar, "⏹  Stop",     self.stop_wallpaper)
+        self.btn(topbar, "⏹  Stop",     self.stop_wallpaper)
         self.btn(topbar, "❌  Quit",    Gtk.main_quit)
 
         # ---------- MAIN AREA ----------
@@ -260,6 +261,17 @@ class App(Gtk.Window):
         self.rotate_check.set_active(self.rotate_on)
         self.rotate_check.connect("toggled", self.on_rotate_toggle)
         botbar.pack_start(self.rotate_check, False, False, 0)
+        # Pause mode
+        pause_lbl = Gtk.Label(label="Pause:")
+        botbar.pack_start(pause_lbl, False, False, 0)
+        self.pause_combo = Gtk.ComboBoxText()
+        for m in ["off", "fullscreen", "window"]:
+            self.pause_combo.append_text(m)
+        _modes = ["off", "fullscreen", "window"]
+        _cur = getattr(self, "pause_mode", "fullscreen")
+        self.pause_combo.set_active(_modes.index(_cur) if _cur in _modes else 1)
+        self.pause_combo.connect("changed", self.on_pause_change)
+        botbar.pack_start(self.pause_combo, False, False, 0)
 
         # Quality dropdown
         qual_lbl = Gtk.Label(label="🎚  Quality:")
@@ -327,7 +339,6 @@ class App(Gtk.Window):
         b.set_can_focus(False)
         b.connect("clicked", lambda *_: cb())
         parent.pack_start(b, False, False, 0)
-        return b
 
     def set_status(self, text):
         self.status.set_text(text)
@@ -347,6 +358,7 @@ class App(Gtk.Window):
                 self.rotate_mins = c["main"].getint("interval", 10)
                 self.quality = c["main"].get("quality", "auto")
                 self.fps = c["main"].get("fps", "native")
+                self.pause_mode = c["main"].get("pause_mode", "fullscreen")
         except Exception:
             pass
 
@@ -358,6 +370,7 @@ class App(Gtk.Window):
             "interval": str(self.rotate_mins),
             "quality": self.quality,
             "fps": self.fps,
+            "pause_mode": getattr(self, "pause_mode", "fullscreen"),
         }
         if WALL_DIR:
             c.set("main", "folder", WALL_DIR)
@@ -665,6 +678,11 @@ class App(Gtk.Window):
         else:
             self.set_status(f"⚠  optimize failed ({rc})")
         return False
+
+    def on_pause_change(self, combo):
+        self.pause_mode = combo.get_active_text() or "fullscreen"
+        self._save_conf()
+        self.set_status(f"⏸  pause: {self.pause_mode}")
 
     def on_rotate_toggle(self, btn):
         self.rotate_on = btn.get_active()
